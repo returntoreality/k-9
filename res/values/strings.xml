@@ -1141,7 +1141,9 @@ Please submit bug reports, contribute new features and ask questions at
     <string name="last_refresh_time_format_with_push">Refreshed <xliff:g id="time_with_preposition">%s</xliff:g> (Push active)</string>
     <string name="preposition_for_date">on <xliff:g id="date">%s</xliff:g></string>
 
+    <string name="account_setup_use_ccert_label">Use Client Certificate Authentication</string>
     <string name="mark_all_as_read">Mark all as read</string>
+    <string name="account_setup_failed_dlg_ccert_required">Current settings require a valid client certificate to be selected.</string>
 
     <string name="global_settings_colorize_missing_contact_pictures_label">Colorize contact pictures</string>
     <string name="global_settings_colorize_missing_contact_pictures_summary">Colorize missing contact pictures</string>

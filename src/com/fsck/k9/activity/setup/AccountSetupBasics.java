@@ -242,7 +242,7 @@ public class AccountSetupBasics extends K9Activity
                 mAccount.setDeletePolicy(Account.DELETE_POLICY_NEVER);
             }
             // Check incoming here.  Then check outgoing in onActivityResult()
-            AccountSetupCheckSettings.actionCheckSettings(this, mAccount, CheckDirection.INCOMING);
+            AccountSetupCheckSettings.actionCheckSettings(this, mAccount, CheckDirection.INCOMING, false);
         } catch (UnsupportedEncodingException enc) {
             // This really shouldn't happen since the encoding is hardcoded to UTF-8
             Log.e(K9.LOG_TAG, "Couldn't urlencode username or password.", enc);

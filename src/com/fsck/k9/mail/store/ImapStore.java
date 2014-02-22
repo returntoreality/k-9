@@ -116,7 +116,7 @@ public class ImapStore extends Store {
     public static final int CONNECTION_SECURITY_SSL_REQUIRED = 3;
     public static final int CONNECTION_SECURITY_SSL_OPTIONAL = 4;
 
-    public enum AuthType { PLAIN, CRAM_MD5 }
+    public enum AuthType { PLAIN, CRAM_MD5, EXTERNAL }
 
     private static final int IDLE_READ_TIMEOUT_INCREMENT = 5 * 60 * 1000;
     private static final int IDLE_FAILURE_COUNT_LIMIT = 10;
@@ -358,6 +358,7 @@ public class ImapStore extends Store {
     private String mUsername;
     private String mPassword;
     private int mConnectionSecurity;
+    private String mClientCertificateAlias;
     private AuthType mAuthType;
     private volatile String mPathPrefix;
     private volatile String mCombinedPrefix = null;
@@ -378,6 +379,11 @@ public class ImapStore extends Store {
         @Override
         public int getConnectionSecurity() {
             return mConnectionSecurity;
+        }
+        
+        @Override
+        public String getClientCertificateAlias() {
+        	return mClientCertificateAlias;
         }
 
         @Override
@@ -480,6 +486,8 @@ public class ImapStore extends Store {
             break;
         }
 
+        mClientCertificateAlias = mAccount.getStoreClientCertificateAlias();
+        
         mAuthType = AuthType.valueOf(settings.authenticationType);
         mUsername = settings.username;
         mPassword = settings.password;
@@ -2445,15 +2453,8 @@ public class ImapStore extends Store {
 
                         if (connectionSecurity == CONNECTION_SECURITY_SSL_REQUIRED ||
                                 connectionSecurity == CONNECTION_SECURITY_SSL_OPTIONAL) {
-                            SSLContext sslContext = SSLContext.getInstance("TLS");
                             boolean secure = connectionSecurity == CONNECTION_SECURITY_SSL_REQUIRED;
-                            sslContext
-                                    .init(null,
-                                            new TrustManager[] { TrustManagerFactory.get(
-                                                    mSettings.getHost(),
-                                                    mSettings.getPort(), secure) },
-                                            new SecureRandom());
-                            mSocket = TrustedSocketFactory.createSocket(sslContext);
+                            mSocket = TrustManagerFactory.createSslSocket(mSettings.getHost(), secure, mSettings.getClientCertificateAlias() );
                         } else {
                             mSocket = new Socket();
                         }
@@ -2503,13 +2504,8 @@ public class ImapStore extends Store {
                         // STARTTLS
                         executeSimpleCommand("STARTTLS");
 
-                        SSLContext sslContext = SSLContext.getInstance("TLS");
                         boolean secure = mSettings.getConnectionSecurity() == CONNECTION_SECURITY_TLS_REQUIRED;
-                        sslContext.init(null,
-                                new TrustManager[] { TrustManagerFactory.get(
-                                        mSettings.getHost(),
-                                        mSettings.getPort(), secure) },
-                                new SecureRandom());
+                        mSocket = TrustManagerFactory.performStartTls(mSocket, mSettings.getHost(), mSettings.getPort(), secure, mSettings.getClientCertificateAlias());
                         mSocket = TrustedSocketFactory.createSocket(sslContext, mSocket,
                                 mSettings.getHost(), mSettings.getPort(), true);
                         mSocket.setSoTimeout(Store.SOCKET_READ_TIMEOUT);
@@ -2517,6 +2513,14 @@ public class ImapStore extends Store {
                                                       .getInputStream(), 1024));
                         mParser = new ImapResponseParser(mIn);
                         mOut = mSocket.getOutputStream();
+                        
+                        if (K9.DEBUG)
+                            Log.i(K9.LOG_TAG, "Updating capabilities after STARTTLS");
+                        List<ImapResponse> responses = receiveCapabilities(executeSimpleCommand(COMMAND_CAPABILITY));
+                        if (responses.size() != 2) {
+                            throw new MessagingException("Invalid CAPABILITY response received");
+                        }
+
                     } else if (mSettings.getConnectionSecurity() == CONNECTION_SECURITY_TLS_REQUIRED) {
                         throw new MessagingException("TLS not supported but required");
                     }
@@ -2539,6 +2543,12 @@ public class ImapStore extends Store {
 
                     } else if (mSettings.getAuthType() == AuthType.PLAIN) {
                         receiveCapabilities(executeSimpleCommand(String.format("LOGIN %s %s", ImapStore.encodeString(mSettings.getUsername()), ImapStore.encodeString(mSettings.getPassword())), true));
+                    } else if (mSettings.getAuthType() == AuthType.EXTERNAL) {
+                    	if (hasCapability("AUTH=EXTERNAL")) {
+                    		executeSimpleCommand(String.format("AUTHENTICATE EXTERNAL %s", Utility.base64Encode(mSettings.getUsername())), false);
+                    	} else {
+                    		throw new MessagingException("EXTERNAL authentication not advertised by server");
+                    	}
                     }
                     authSuccess = true;
                 } catch (ImapException ie) {
